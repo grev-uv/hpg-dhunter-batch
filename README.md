@@ -39,7 +39,7 @@ where:
 22. Select the kind of analyze (grouped or single samples)
 23. Text window showing the path to save the results.
 
-There is an important change to do before launch the compilation. The file [hpg_dhunter.pro](src/hpg_dhunter.pro) needs the path to cuda sdk installation at line 58:
+There is an important change to do before launch the compilation. The file [hpg_dhunter.pro](src/hpg_dhunter.pro#L58) needs the path to cuda sdk installation at line 58:
 ```
 CUDA_DIR = /path/to/cuda/sdk/cuda
 ```
