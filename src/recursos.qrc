@@ -1,0 +1,31 @@
+<RCC>
+    <qresource prefix="/refGen">
+        <file>genmap/refmap_ucsc_chr1.csv</file>
+        <file>genmap/refmap_ucsc_chr2.csv</file>
+        <file>genmap/refmap_ucsc_chr3.csv</file>
+        <file>genmap/refmap_ucsc_chr4.csv</file>
+        <file>genmap/refmap_ucsc_chr5.csv</file>
+        <file>genmap/refmap_ucsc_chr6.csv</file>
+        <file>genmap/refmap_ucsc_chr7.csv</file>
+        <file>genmap/refmap_ucsc_chr8.csv</file>
+        <file>genmap/refmap_ucsc_chr9.csv</file>
+        <file>genmap/refmap_ucsc_chr10.csv</file>
+        <file>genmap/refmap_ucsc_chr11.csv</file>
+        <file>genmap/refmap_ucsc_chr12.csv</file>
+        <file>genmap/refmap_ucsc_chr13.csv</file>
+        <file>genmap/refmap_ucsc_chr14.csv</file>
+        <file>genmap/refmap_ucsc_chr15.csv</file>
+        <file>genmap/refmap_ucsc_chr16.csv</file>
+        <file>genmap/refmap_ucsc_chr17.csv</file>
+        <file>genmap/refmap_ucsc_chr18.csv</file>
+        <file>genmap/refmap_ucsc_chr19.csv</file>
+        <file>genmap/refmap_ucsc_chr20.csv</file>
+        <file>genmap/refmap_ucsc_chr21.csv</file>
+        <file>genmap/refmap_ucsc_chr22.csv</file>
+        <file>genmap/refmap_ucsc_chr23.csv</file>
+        <file>genmap/refmap_ucsc_chr24.csv</file>
+    </qresource>
+    <qresource prefix="/images">
+        <file>icon.png</file>
+    </qresource>
+</RCC>
