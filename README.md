@@ -40,7 +40,7 @@ There is an important change to do before launching the compilation. The file [h
 CUDA_DIR = /path/to/cuda/sdk/cuda
 ```
 
-## System requirement
+## System requirements
 The HPG-Dhunter-batch tool, as a complementary tool of HPG-Dhunter visualizer, is the next step after HPG-HMapper tool. Therefore, the system requirements are the same as the ones for HPG-HMapper, plus a GPU device.
 HPG-Dhunter should work properly in a station with the following set-up:
 - A 64 bit Intel CPU compatible with SSE4.2.
