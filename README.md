@@ -46,7 +46,7 @@ HPG-Dhunter should work properly in a station with the following set-up:
 - A 64 bit Intel CPU compatible with SSE4.2.
 - The DNA data for DMR tasks needs as much adjacent memory as the number of samples by the length of the largest chromosome to be analized. This parameter has a direct relationship with the global memory available in the GPU device. The test was done with 32 MB of RAM.
 - The amount of samples that HPG-Dhunter can analize at the same time directly depends on the amount of the device memory. Working with a Nvidia GeForce GTX 1080 with 8 GB of GRAM, it is possible to analyze and visualize up to six samples of human chromosome-21 or up to four human chromosome-10, or up to two human chromosome-1 at the same time.
-- The CUDA compilation is configured to a single device with Nvidia Pascal GPU architecture. So, the devices that will work properly are Titan XP and X models, Tesla P40, P6 and P4 models, Quadro P6000, P5000, P4000 models, GeForce GTX 1808Ti, 1080, 1070Ti, 1070 models, and others easy to find here.
+- The CUDA compilation is configured to a single device with Nvidia Pascal GPU architecture. So, the devices that will work properly are Titan XP and X models, Tesla P40, P6 and P4 models, Quadro P6000, P5000, P4000 models, GeForce GTX 1080Ti, 1080, 1070Ti, 1070 models, and others easy to find here.
 - The Nvidia driver is needed (v384 or higher).
 - The CUDA API is needed(v9 or higher).
 
