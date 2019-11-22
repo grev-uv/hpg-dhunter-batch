@@ -1,4 +1,7 @@
 # HPG-Dhunter batch process
+
+If you want to use this tool just now, there is an executable file for Linux x86_64 systems. This compressed file is available at [releases page](../../releases). But, previously, CUDA and Nvidia drivers must be installed in your system. For that, you can go to [System requirements section](README.MD#L81)
+
 **HPG-Dhunter batch**  is a complementary tool of [**HPG-Dhunter**](https://github.com/grev-uv/hpg-dhunter) tool that automatically detects all the Differentially Methylated Regions (DMRs) among the considered samples for all the chromosomes in the genome. It is also based on the Discrete Wavelet Transform (DWT), and it provides a list of all the DMRs found.
 
 **HPG-Dhunter batch** identifier is a powerful tool that uses the high performance parallel computing capabilites of GPUs and the CUDA programming interface model to detect DMRs and save the results into a .gff and .csv file, minimizing the CPU-GPU communication. The batch process allows the identification of DMRs analyzing all the samples together. 
@@ -49,9 +52,11 @@ HPG-Dhunter should work properly in a station with the following set-up:
 - The CUDA compilation is configured to a single device with Nvidia Pascal GPU architecture. So, the devices that will work properly are Titan XP and X models, Tesla P40, P6 and P4 models, Quadro P6000, P5000, P4000 models, GeForce GTX 1080Ti, 1080, 1070Ti, 1070 models, and others easy to find here.
 - The Nvidia driver is needed (v384 or higher).
 - The CUDA API is needed(v9 or higher).
+- For a complete installation of Nvidia drivers and CUDA, it can download just one file from [here](https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64) and follow the instructions, that appear in the same page after select the distribution and version, for a pretty installation.
 
 ## Build
 The way to build HPG-Dhunter batch identifier in your system is opening the software as a project inside an installed QtCreator (> v4.5, Qt > v5.8, GCC 5) IDE and build it from there.
+
 In the next future, another available way will be to handling this software as a cloud service.
 
 ## Issues
