@@ -1,6 +1,6 @@
 # HPG-Dhunter batch process
 
-If you want to use this tool just now, there is an executable file for Linux x86_64 systems. This compressed file is available at [releases page](../../releases). But, previously, CUDA and Nvidia drivers must be installed in your system. For that, you can go to [System requirements section](README.MD#L81)
+If you want to use this tool just now, there is an executable file for Linux x86_64 systems. This compressed file is available at [releases page](../../releases). But, previously, CUDA and Nvidia drivers must be installed in your system. For that, you can go to [System requirements section](README.MD#L46)
 
 **HPG-Dhunter batch**  is a complementary tool of [**HPG-Dhunter**](https://github.com/grev-uv/hpg-dhunter) tool that automatically detects all the Differentially Methylated Regions (DMRs) among the considered samples for all the chromosomes in the genome. It is also based on the Discrete Wavelet Transform (DWT), and it provides a list of all the DMRs found.
 
