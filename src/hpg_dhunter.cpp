@@ -12,15 +12,13 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <exception>
 
 using namespace std;
 
 HPG_Dhunter::HPG_Dhunter(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::HPG_Dhunter),
-    chrom_sizes({950, 930, 760, 730, 700, 660, 620, 570,
-                 550, 530, 520, 520, 380, 350, 330, 360,
-                 320, 310, 240, 250, 160, 150, 610, 230}),
     mutex()
 {
     ui->setupUi(this);
@@ -28,14 +26,14 @@ HPG_Dhunter::HPG_Dhunter(QWidget *parent) :
     // inicialización de variables ------------------------------------------------------------
     fichero            = "";
     num_genes          = 0;
-    limite_inferior    = 50000000;
+    limite_inferior    = 500000000;
     limite_superior    = 0;
     cuda_data.mc_full  = nullptr;
     cuda_data.h_haar_C = nullptr;
     cuda_data.refGen   = nullptr;
     dmr_diff           = nullptr;
 
-    contador          = 0;
+    contador           = 0;
     ui->progressBar->setMinimum(0);
 
     // cursor para ventana con lista de ficheros de control
@@ -81,12 +79,12 @@ HPG_Dhunter::HPG_Dhunter(QWidget *parent) :
     //   que informa de la capacidad total de memoria de la tarjeta
     QRegularExpression re("(\\d+)MiB");
     QRegularExpressionMatchIterator i = re.globalMatch(data);
-    i.next();
-    QRegularExpressionMatch match = i.next();
-    qDebug() << match.captured(0) << match.captured(1);
+    QRegularExpressionMatch match_1 = i.next();
+    QRegularExpressionMatch match_2 = i.next();
+    qDebug() << "memoria GPU ocupada / total ----> " << match_1.captured(1) << "/" << match_2.captured(1);
 
     // ..se asigna a la variable el valor en MiB
-    memory_available = match.captured(1).toInt();
+    memory_available = match_2.captured(1).toInt() - match_1.captured(1).toInt();
 
     ui->statusBar->showMessage("System available GPU RAM: " + QString::number(memory_available));
 
@@ -579,14 +577,14 @@ void HPG_Dhunter::fichero_leido(int sample, int chrom, int inicio, int final)
     mutex.lock();
     if (limite_inferior > uint(inicio))
         limite_inferior = uint(inicio);
-    mutex.unlock();
-    mutex.lock();
+//    mutex.unlock();
+//    mutex.lock();
     if (limite_superior < uint(final))
         limite_superior = uint(final);
-    mutex.unlock();
+//    mutex.unlock();
 
     // contador de evolución de lectura y análisis
-    mutex.lock();
+//    mutex.lock();
     contador ++;
     mutex.unlock();
     ui->progressBar->setValue(ui->progressBar->value() + 1);
@@ -603,11 +601,15 @@ void HPG_Dhunter::cromosoma_leido(int chrom)
     QTimer::singleShot(500, &loop, SLOT(quit()));
     loop.exec();
 
+    STOP_TIMER_2("FICHEROS CROMOSOMA LEIDOS -------------");
     START_TIMER_3 // proceso de cálculo
+
     ui->statusBar->showMessage("identifying DMRs...");
 
     // calcula wavelet de cada uno de los ficheros leídos
     lectura_acabada();
+
+    STOP_TIMER_3("DMRs CALCULADOS -------")
 
     limite_inferior = 500000000;
     limite_superior = 0;
@@ -615,7 +617,6 @@ void HPG_Dhunter::cromosoma_leido(int chrom)
     // índice en la lista de cromosomas, del cromosoma leído
     int idx = lista_chroms.indexOf(chrom);
 
-    STOP_TIMER_2("CROMOSOMA LEIDO-------------");
     // si no ha terminado de leer los ficheros de la lista de cromosomas -> lanza nuevo hilo
     if (idx < lista_chroms.size() - 1)
     {
@@ -624,38 +625,8 @@ void HPG_Dhunter::cromosoma_leido(int chrom)
         ui->statusBar->showMessage("freeing memory... it will takes a while");
 
         // limpia las matrices de datos del cromosoma anterior
-        for (vector<vector<double>> n : mc)
-        {
-            for (vector<double> m : n)
-            {
-                    m.clear();
-                    m.shrink_to_fit();
-                    vector<double>().swap(m);
-            }
-            n.clear();
-            n.shrink_to_fit();
-            vector<vector<double>>().swap(n);
-        }
-
-        mc.clear();
-        mc.shrink_to_fit();
         vector<vector<vector<double>>>().swap(mc);
 
-        for (vector<vector<double>> n : mc_grouped)
-        {
-            for (vector<double> m : n)
-            {
-                    m.clear();
-                    m.shrink_to_fit();
-                    vector<double>().swap(m);
-            }
-            n.clear();
-            n.shrink_to_fit();
-            vector<vector<double>>().swap(n);
-        }
-
-        mc_grouped.clear();
-        mc_grouped.shrink_to_fit();
         vector<vector<vector<double>>>().swap(mc_grouped);
 
         ui->statusBar->showMessage("reading next chromosome...");
@@ -755,6 +726,14 @@ void HPG_Dhunter::refGen_worker_acabado(ulong num_genex)
 // ************************************************************************************************
 void HPG_Dhunter::on_start_clicked()
 {
+    lista_casos   = ui->case_files->toPlainText().split("\n");
+    lista_control = ui->control_files->toPlainText().split("\n");
+
+    qDebug() << "---control muestras con cobertura--- " << lista_casos.length() <<
+                ui->min_covSamples_x_region->value() * 0.01 <<
+                lista_casos.length() * (ui->min_covSamples_x_region->value() * 0.01);
+
+
     // inicializa contador de regiones DMR detectadas
     region_gff = 0;
 
@@ -765,8 +744,6 @@ void HPG_Dhunter::on_start_clicked()
                                 "0"                             // se informa del número de hilo asignado
                  );
 
-    lista_casos   = ui->case_files->toPlainText().split("\n");
-    lista_control = ui->control_files->toPlainText().split("\n");
     switch (ui->genome_reference->currentIndex())
     {
         case 0:
@@ -865,48 +842,16 @@ void HPG_Dhunter::on_start_clicked()
         // limpia las matrices de datos
         ui->statusBar->showMessage("freeing memory... it will takes a while");
 
-        for (vector<vector<double>> n : mc)
-        {
-            for (vector<double> m : n)
-            {
-                    m.clear();
-                    m.shrink_to_fit();
-                    vector<double>().swap(m);
-            }
-            n.clear();
-            n.shrink_to_fit();
-            vector<vector<double>>().swap(n);
-        }
-
-        mc.clear();
-        mc.shrink_to_fit();
         vector<vector<vector<double>>>().swap(mc);
 
-        for (vector<vector<double>> n : mc_grouped)
-        {
-            for (vector<double> m : n)
-            {
-                    m.clear();
-                    m.shrink_to_fit();
-                    vector<double>().swap(m);
-            }
-            n.clear();
-            n.shrink_to_fit();
-            vector<vector<double>>().swap(n);
-        }
-
-        mc_grouped.clear();
-        mc_grouped.shrink_to_fit();
         vector<vector<vector<double>>>().swap(mc_grouped);
 
         // borra todos los posibles hilos creados anteriormente
         foreach(QThread *i, hilo_files_worker)
             delete i;
 
-        hilo_files_worker.clear();
-        hilo_files_worker.shrink_to_fit();
-        files_worker.clear();
-        files_worker.shrink_to_fit();
+        QVector<QThread*>().swap(hilo_files_worker);
+        QVector<Files_worker*>().swap(files_worker);
 
         START_TIMER_1 // total trabajo
         START_TIMER_2 // por cromosoma
@@ -1051,15 +996,6 @@ void HPG_Dhunter::lectura_acabada()
         if ((!mh && _mc) || (mh && _hmc))
         {
             // limpia matriz de resultados de procesamiento en GPU
-            foreach (vector<float> n, h_haar_C)
-            {
-                n.clear();
-                n.shrink_to_fit();
-                vector<float>().swap(n);
-            }
-
-            h_haar_C.clear();
-            h_haar_C.shrink_to_fit();
             vector<vector<float>>().swap(h_haar_C);
 
             // realiza el cálculo de DWT en GPU con datos según modelo elegido (por grupo o individual)
@@ -1189,9 +1125,7 @@ void HPG_Dhunter::lectura_acabada()
                 uint filas_procesadas = 0;
                 uint filas_a_GPU      = 1;
 
-                posicion_metilada.clear();
-                posicion_metilada.assign(uint(mc.size()), vector<uint> (dimension, 0));
-
+                vector<vector<uint>>(uint(mc.size()), vector<uint>()).swap(posicion_metilada);
 
                 while (filas_procesadas < mc.size())
                 {
@@ -1214,7 +1148,7 @@ void HPG_Dhunter::lectura_acabada()
                     uint tamanyo = dimension * filas_a_GPU * sizeof(float) / (1024 * 1024);  // tamaño en MiB
 
                     // calcula el número de filas de mc que puede procesar en GPU simultaneamente
-                    while (tamanyo < 0.20 * memory_available)
+                    while (tamanyo < 0.5 * memory_available)
                     {
                         if (filas_a_GPU + filas_procesadas < mc.size())
                             filas_a_GPU++;
@@ -1244,71 +1178,30 @@ void HPG_Dhunter::lectura_acabada()
                     // para trasvase de datos entre GPU y CPU con CUDA, la matriz debe ser contigua completa
                     // reserva la memoria para la matriz de datos extendida
                     cuda_data.mc_full = new float*[cuda_data.samples];
-                    cuda_data.mc_full[0] = new float[uint(cuda_data.samples) * cuda_data.sample_num];
+                    cuda_data.mc_full[0] = new float[uint(cuda_data.samples) * cuda_data.sample_num]();
                     for (int i = 1; i < cuda_data.samples; i++)
                             cuda_data.mc_full[i] = cuda_data.mc_full[i - 1] + cuda_data.sample_num;
 
                     // copia de todos los datos a la matriz ampliada
                     // --------------------------------------------------------------------------------------------
                     //for (uint m = filas_procesadas - filas_a_GPU; m < filas_procesadas; m++)
-                    uint cuenta_posiciones_metiladas;
-                    uint pos_met;
+                    //uint cuenta_posiciones_metiladas;
+                    //uint pos_met;
                     for (uint m = 0; m < uint(cuda_data.samples); m++)
                     {
-                        cuenta_posiciones_metiladas = 0;
-                        pos_met                     = 1;
-                        // rellenar de ceros la matriz de datos
-                        for (uint n = 0; n < cuda_data.sample_num + 1; ++n)
-                            cuda_data.mc_full [m][n] = 0.0;
-
                         // rellenar con datos las posiciones metiladas si la cobertura es mayor que el umbral
                         uint posicion = m + filas_procesadas - filas_a_GPU;
-                        if (mh == 0)
-                        {
-                            for (uint k = 0; k < mc[posicion].size(); k++)
-                                if(mc[posicion][k][2] >= _mc_min_coverage)
-                                {
-                                    cuda_data.mc_full [m][uint(mc[posicion][k][0]) - limite_inferior] = float(mc[posicion][k][1]);
 
-                                    cuenta_posiciones_metiladas++;
-                                    while (pos_met < uint(mc[posicion][k][0]) - limite_inferior)
-                                    {
-                                        posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas - 1;
-                                        pos_met++;
-                                    }
-                                    posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas;
-                                }
-                            pos_met++;
-                            while (pos_met < posicion_metilada[m].size())
-                            {
-                                posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas;
-                                pos_met++;
-                            }
-                        }
-                        else
+                        for (uint k = 0; k < mc[posicion].size(); k++)
                         {
-                            for (uint k = 0; k < mc[posicion].size(); k++)
-                                if(mc[posicion][k][8] >= _hmc_min_coverage)
-                                {
-                                    cuda_data.mc_full [m][uint(mc[posicion][k][0]) - limite_inferior] = float(mc[posicion][k][7]);
-
-                                    cuenta_posiciones_metiladas++;
-                                    while (pos_met < uint(mc[posicion][k][0]) - limite_inferior)
-                                    {
-                                        posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas - 1;
-                                        pos_met++;
-                                    }
-                                    posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas;
-                                }
-                            pos_met++;
-                            while (pos_met < posicion_metilada[m].size())
+                            if(mc[posicion][k][(mh == 0 ? 2 : 8)] >= (mh == 0 ? _mc_min_coverage : _hmc_min_coverage))
                             {
-                                posicion_metilada[posicion][pos_met] = cuenta_posiciones_metiladas;
-                                pos_met++;
+                                cuda_data.mc_full [m][uint(mc[posicion][k][0]) - limite_inferior] = float(mc[posicion][k][(mh == 0 ? 1 : 7)]);
+
+                                posicion_metilada[posicion].push_back(uint(mc[posicion][k][0] - limite_inferior));
                             }
                         }
                     }
-
 
                     // envía los datos a la memoria global de la GPU
                     // --------------------------------------------------------------------------------------------
@@ -1332,6 +1225,26 @@ void HPG_Dhunter::lectura_acabada()
                         h_haar_C.push_back(aux);
                     }
                 }
+
+                // comprueba la memoria disponible en la tarjeta gráfica para controlar los ficheros a cargar
+                // ..captura la información suministrada por el comando "nvidia-smi"
+                QProcess p;
+                p.start("nvidia-smi");
+                p.waitForFinished();
+                QString data = p.readAllStandardOutput();
+                p.close();
+
+                // ..busca los datos que concuerdan con "[[:digit:]]+MiB" y se queda con el segundo dato
+                //   que informa de la capacidad de memoria disponible de la tarjeta
+                QRegularExpression re("(\\d+)MiB");
+                QRegularExpressionMatchIterator i = re.globalMatch(data);
+                QRegularExpressionMatch match_1 = i.next();
+                QRegularExpressionMatch match_2 = i.next();
+                qDebug() << "memoria GPU ocupada / total ----> " << match_1.captured(1) << "/" << match_2.captured(1);
+
+                // ..se asigna a la variable el valor en MiB
+                memory_available = match_2.captured(1).toInt() - match_1.captured(1).toInt();
+
             }
 
             qDebug() << "tamaño final matriz de datos h_haar_C: " << h_haar_C.size() << "x" << h_haar_C.at(0).size()
@@ -1340,13 +1253,27 @@ void HPG_Dhunter::lectura_acabada()
             // con los resultados completos en la matriz, pasa a la identificación de DMRs
             find_dmrs();
 
-            STOP_TIMER_3("DMRs CALCULADOS-------")
-
             // con los DMRs identificados, salva el resultado en un fichero
             save_dmr_list(mh);
 
             ui->progressBar->setValue(ui->progressBar->value() + 1);
         }
+
+        // libera la memoria de la GPU y la memoria RAM
+        cuda_end(cuda_data);
+        if (cuda_data.mc_full != nullptr)
+        {
+            delete [] cuda_data.mc_full[0];
+            delete [] cuda_data.mc_full;
+        }
+        cuda_data.mc_full = nullptr;
+
+        if (cuda_data.h_haar_C != nullptr)
+        {
+            delete [] cuda_data.h_haar_C[0];
+            delete [] cuda_data.h_haar_C;
+        }
+        cuda_data.h_haar_C = nullptr;
     }
 }
 
@@ -1372,9 +1299,9 @@ void HPG_Dhunter::find_dmrs()
         qDebug() << "----------- buscando DMRs por agrupamiento de muestras ----------";
         for (uint m = 0; m < uint(cuda_data.h_haar_L[0]); m++)
             if (((m + 1) * paso < posicion_metilada[0].size() ? posicion_metilada[0][(m + 1) * paso] : posicion_metilada[0].back()) >
-                    posicion_metilada[0][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) / 100) &&
+                    posicion_metilada[0][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) * 0.01) &&
                 ((m + 1) * paso < posicion_metilada[1].size() ? posicion_metilada[1][(m + 1) * paso] : posicion_metilada[1].back()) >
-                    posicion_metilada[1][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) / 100))
+                    posicion_metilada[1][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) * 0.01))
                 dmr_diff[m] = h_haar_C[0][m] - h_haar_C[1][m];
     }
     else
@@ -1383,8 +1310,12 @@ void HPG_Dhunter::find_dmrs()
         uint contador = 0;
         uint cont_diff = 0;
 
+        int ultimo_m = 0;
+
+        vector<uint> idx_pos_met (uint(mc.size()), 0);
+
         // realiza el cálculo de medias de las muestras de control y de los casos con cobertura sobre umbral
-        for (int m = 0; m < cuda_data.h_haar_L[0]; m++) // ...en cada posición
+        for (uint m = 0; m < uint(cuda_data.h_haar_L[0]); m++) // ...en cada posición
         {
             float media_casos   = 0.0;
             float media_control = 0.0;
@@ -1393,39 +1324,61 @@ void HPG_Dhunter::find_dmrs()
 
             for (uint i = 0; i < h_haar_C.size(); i++)
             {
-                // valor medio de transformada entre las muestras con cobertura superior a mínima
-                if (int(mc[i][0][11]) == 0)
+                uint aux_1 = 0;
+                uint aux_2 = 0;
+
+                while (m * paso >= posicion_metilada[i][idx_pos_met[i] + aux_1] && idx_pos_met[i] + aux_1 < posicion_metilada[i].size() - 1)
+                    aux_1++;
+
+                aux_2 = aux_1;
+
+                while ((m + 1) * paso > posicion_metilada[i][idx_pos_met[i] + aux_2] && idx_pos_met[i] + aux_2 < posicion_metilada[i].size() - 1)
+                    aux_2++;
+
+                idx_pos_met[i] += aux_2;
+
+                if (aux_2 - aux_1 >= paso * uint(ui->min_CpG_x_region->value()) * 0.01)
                 {
-                    if (((uint(m) + 1) * paso < posicion_metilada[i].size() ? posicion_metilada[i][(uint(m) + 1) * paso] : posicion_metilada[i].back()) >
-                            posicion_metilada[i][uint(m) * paso] + (paso * uint(ui->min_CpG_x_region->value()) / 100))
+                    if (int(mc[i][0][11]) == 0)
                     {
-                        media_casos += h_haar_C[i][uint(m)]; // * (1.0 / lista_casos.size()); // numero_casos);
-                        numero_casos++;
-                    }
-                }
-                else
-                {
-                    if (((uint(m) + 1) * paso < posicion_metilada[i].size() ? posicion_metilada[i][(uint(m) + 1) * paso] : posicion_metilada[i].back()) >
-                            posicion_metilada[i][uint(m) * paso] + (paso * uint(ui->min_CpG_x_region->value()) / 100))
-                    {
-                        media_control += h_haar_C[i][uint(m)];
+                        media_control += h_haar_C[i][m];
                         numero_control++;
+                    }
+                    else
+                    {
+                        media_casos += h_haar_C[i][m];
+                        numero_casos++;
                     }
                 }
             }
 
-            if (numero_casos > 0 && numero_control > 0)
+            //if (numero_casos > 0 && numero_control > 0)                                                                    // al menos una muestra por grupo tiene cobertura
+            if (numero_casos   > (uint(lista_casos.length()   * (ui->min_covSamples_x_region->value() * 0.01))) &&
+                numero_control > (uint(lista_control.length() * (ui->min_covSamples_x_region->value() * 0.01))))             // al menos el XX% por grupo tienen cobertura
+            //if (numero_casos == uint(lista_casos.length()) && numero_control == uint(lista_control.length()))              // todas las muestras tienen cobertura
             {
                 // guada diferencias solo si caso y control han resultado diferentes de cero -> hay cobertura mínima en, al menos, una muestra de caso y control
                 dmr_diff[m] = (media_casos / numero_casos) - (media_control / numero_control);
 
                 // para control de programa (a borrar)
+                ultimo_m = int(m);
                 contador++;
+
+
+            //    if (contador > 4000)
+            //        qDebug() << dmr_diff[m];
+
+
                 if (dmr_diff[m] < -_threshold || dmr_diff[m] > _threshold)
+                {
                     cont_diff++;
+                }
             }
         }
-        qDebug() << "número de ventanas dwt con valor > 0 " << contador << " número de ventanas con diff mayor que umbral: " << cont_diff;
+        qDebug() << "número de ventanas dwt con valor > 0 " << contador
+                 << " número de ventanas con diff mayor que umbral: " << cont_diff
+                 << " ultimo eme: " << ultimo_m
+                 << " diferencia último: " << dmr_diff[ultimo_m];
     }
 
     dmr_diff_cols = uint(cuda_data.h_haar_L[0]);
@@ -1512,7 +1465,9 @@ void HPG_Dhunter::hallar_dmrs()
                         match = true;
                         linea.append(" " + QString::fromStdString(cuda_data.refGen[mitad][0]) +
                                      " " + QString::fromStdString(cuda_data.refGen[mitad][1]) +
-                                     " -" + QString::number(stoul(cuda_data.refGen[mitad][3]) - posicion_dmr[q]));
+                                     " -" + QString::number(stoul(cuda_data.refGen[mitad][3]) > posicion_dmr[q] ?
+                                                            stoul(cuda_data.refGen[mitad][3]) - posicion_dmr[q] :
+                                                            posicion_dmr[q] - stoul(cuda_data.refGen[mitad][3])));
                     }
                     // el inicio dmr es mayor que inicio del gen anterior pero es menor que el fin del gen anterior
                     else if (gen_ant_fin > posicion_dmr[q])
@@ -1520,7 +1475,9 @@ void HPG_Dhunter::hallar_dmrs()
                         match = true;
                         linea.append(" " + QString::fromStdString(cuda_data.refGen[mitad > 0? mitad - 1 : 0][0]) +
                                      " " + QString::fromStdString(cuda_data.refGen[mitad > 0? mitad - 1 : 0][1]) +
-                                     " +" + QString::number(posicion_dmr[q] - stoul(cuda_data.refGen[mitad > 0? mitad - 1 : 0][3])));
+                                     " +" + ((posicion_dmr[q] > stoul(cuda_data.refGen[mitad > 0? mitad - 1 : 0][3])) ?
+                                            QString::number(posicion_dmr[q] - stoul(cuda_data.refGen[mitad > 0? mitad - 1 : 0][3])) :
+                                            QString::number(stoul(cuda_data.refGen[mitad > 0? mitad - 1 : 0][3]) - posicion_dmr[q])));
                     }
 
 
@@ -1579,13 +1536,20 @@ void HPG_Dhunter::hallar_dmrs()
 void HPG_Dhunter::save_dmr_list(int mh)
 {
     // prepara nombre de fichero y directorio para guardar la lista de dmrs
-    fichero = ui->out_path_label->text() + "/chromosome_" + QString::number(int(mc[0][0][9])) + "_" + (mh ? "hmc" : "mc") + ".csv";
+    fichero = ui->out_path_label->text() +
+              "/chromosome_" + QString::number(int(mc[0][0][9])) + "_" +
+              (mh ? "hmc_thr0" : "mc_thr0") + QString::number(ui->threshold->value()) +
+              "_dwt" + QString::number(ui->dmr_dwt_level->value()) +
+              "_cov" + (mh ? ui->hmC_min_cov->text() : ui->mC_min_cov->text()) + ".csv";
 
     QFile data;
     data.setFileName(fichero);
 
     // prepara nombre de fichero para guardar los datos con formato GFF
-    fichero_gff = ui->out_path_label->text() + "/" + ui->out_path_label->text().split("/").last() + "_" + (mh ? "hmc_" : "mc_") + "FDD.gff";
+    fichero_gff = ui->out_path_label->text() + "/" + ui->out_path_label->text().split("/").last() + "_" +
+                  (mh ? "hmc_thr0" : "mc_thr0") + QString::number(ui->threshold->value()) +
+                  "_dwt" + QString::number(ui->dmr_dwt_level->value()) +
+                  "_cov" + (mh ? ui->hmC_min_cov->text() : ui->mC_min_cov->text()) + ".gff";
 
     QFile data_gff;
     data_gff.setFileName(fichero_gff);
@@ -1612,6 +1576,7 @@ void HPG_Dhunter::save_dmr_list(int mh)
             uint pos_inf;
             uint pos_sup;
             uint ancho_dmr;
+            vector <uint> posicion_muestra (mc.size(), 0);
 
             // comprueba que el fichero para guardar información en formato GFF se abre correctamente
             if (!data_gff.open(QIODevice::WriteOnly | QIODevice::Append))
@@ -1634,16 +1599,19 @@ void HPG_Dhunter::save_dmr_list(int mh)
                 break;
             }
 
+            qDebug() << "guardando datos en ficheros";
+
             // añade una línea por dmr detectaado y línea de características por muestra en cada dmr
             for (int i = 0; i < dmrs.size(); i++)
             {
+//                qDebug() << "empieza escritura en fichero dmr" << i;
                 // información del dmr para obtener las características de cada muestra
                 linea     = dmrs.at(i);
                 pos_inf   = linea.split("-")[0].toUInt();
                 pos_sup   = linea.split("-")[1].split(" ")[0].toUInt();
                 ancho_dmr = linea.split("-")[1].split(" ")[0].toUInt() - linea.split("-")[0].toUInt();
 
-
+                //**************************************************************************************************************
                 // escribe información del DMR en el fichero GFF
                 if (gff_open)
                 {
@@ -1699,10 +1667,15 @@ void HPG_Dhunter::save_dmr_list(int mh)
                            "Coverage:" << QString::number(mh ? ui->hmC_cobertura->value() : ui->mC_cobertura->value()) << "," <<
                            "Threshold:" << ui->threshold_label->text() << "," <<
                            "DWT_level:" << QString::number(ui->dmr_dwt_level->value()) << "," <<
-                           "Density:" << QString::number(ui->min_CpG_x_region->value()) << "\n";
+                           "Density:" << QString::number(ui->min_CpG_x_region->value()) << "%,"
+                           "Samples/region w/cov:" << QString::number(ui->min_covSamples_x_region->value()) << "%\n";
                 }
-/*
-                // escribe zona dmr detectada
+
+
+
+                //**************************************************************************************************************
+
+                // escribe zona dmr detectada en fichero particular
                 s << dmrs.at(i).split("//")[0] << '\n';
 
                 // posición inicial y final de zona dwt en h_haar_C correspondiente al DMR identificado
@@ -1713,8 +1686,7 @@ void HPG_Dhunter::save_dmr_list(int mh)
                 // encabezado de las características por fichero dentro de la zona dmr
                 s << " sample dwt_value ratio C_positions cov_min cov_mid cov_max sites_C sites_noC sites_mC sites_hmC dist_min dist_mid dist_max\n";
 
-
-
+/*
                 // rellena el fichero en función de si se ha analizado por grupo o por muestra individual
                 if (ui->grouped_samples->isChecked())
                 {
@@ -1815,205 +1787,218 @@ void HPG_Dhunter::save_dmr_list(int mh)
                 }
                 else
                 {
-                    // guarda información de cada fichero de la zona dmr detectada
-                    for (uint j = 0; j < uint(mc.size()); j++)
+*/
+                // guarda información de cada muestra de la zona dmr detectada
+                //***************************************************************************************
+                // busca la posición inical
+                for (uint j = 0; j < mc.size(); j++)
+                {
+                    uint posicion = posicion_muestra[j];
+                    while (pos_inf > mc[j][posicion][0] && posicion < mc[j].size() - 1)
+                        posicion++;
+                    posicion_muestra[j] = posicion;
+                }
+
+                for (uint j = 0; j < uint(mc.size()); j++)
+                {
+                    if (int(mc[j][0][11]) == 0)
                     {
-                        if (int(mc[j][0][11]) == 0)
+                        s << " " << lista_casos.at(int(mc[j][0][10])).split("/").back() << " ";
+
+                        int cobertura_minima = 500000000;
+                        int cobertura_maxima = 0;
+                        int cobertura_media  = 0;
+                        int distancia_minima = 500000000;
+                        int distancia_maxima = 0;
+                        int distancia_media  = 0;
+                        int sites_C          = 0;
+                        int sites_nC         = 0;
+                        int sites_mC         = 0;
+                        int sites_hmC        = 0;
+                        int posiciones       = 0;
+                        float dwt_valor      = 0.0;
+                        float ratio_medio    = 0.0;
+
+                        linea_detail.clear();
+
+                        // busca la posición inical
+                        uint posicion = posicion_muestra[j];
+                    //    while (pos_inf > mc[j][posicion][0])
+                    //        posicion++;
+                    //    posicion_muestra[j] = posicion;
+
+                        // búsqueda de valores a lo largo del DMR
+                        while (pos_sup > mc[j][posicion][0] && posicion < mc[j].size() - 2)
                         {
-                            s << " " << lista_casos.at(int(mc[j][0][10])).split("/").back() << " ";
+                            // cobertura
+                            if (cobertura_minima >= mc[j][posicion][mh ? 8 : 2])
+                                cobertura_minima = int(mc[j][posicion][mh ? 8 : 2]);
+                            if (cobertura_maxima < mc[j][posicion][mh ? 8 : 2])
+                                cobertura_maxima = int(mc[j][posicion][mh ? 8 : 2]);
+                            cobertura_media += mc[j][posicion][mh ? 8 : 2];
+                            if (mc[j][posicion][mh ? 8 : 2] > 0)
+                                ratio_medio     += float(mc[j][posicion][mh ? 6 : 5] / mc[j][posicion][mh ? 8 : 2]);
 
-                            int cobertura_minima = 500000;
-                            int cobertura_maxima = 0;
-                            int cobertura_media  = 0;
-                            int distancia_minima = 500000;
-                            int distancia_maxima = 0;
-                            int distancia_media  = 0;
-                            int sites_C          = 0;
-                            int sites_nC         = 0;
-                            int sites_mC         = 0;
-                            int sites_hmC        = 0;
-                            int posiciones       = 0;
-                            float dwt_valor      = 0.0;
-                            float ratio_medio    = 0.0;
-
-                            linea_detail.clear();
-
-                            // busca la posición inical
-                            uint posicion = 0;
-                            while (pos_inf > mc[j][posicion][0])
-                                posicion++;
-
-                            // búsqueda de valores a lo largo del DMR
-                            while (pos_sup > mc[j][posicion][0] && posicion < mc[j].size())
+                            // distancia
+                            if (posicion + 2 < mc[j].size() && ancho_dmr > mc[j][posicion + 1][0] - mc[j][posicion][0])
                             {
-                                // cobertura
-                                if (cobertura_minima >= mc[j][posicion][mh ? 8 : 2])
-                                    cobertura_minima = int(mc[j][posicion][mh ? 8 : 2]);
-                                if (cobertura_maxima < mc[j][posicion][mh ? 8 : 2])
-                                    cobertura_maxima = int(mc[j][posicion][mh ? 8 : 2]);
-                                cobertura_media += mc[j][posicion][mh ? 8 : 2];
-                                if (mc[j][posicion][mh ? 8 : 2] > 0)
-                                    ratio_medio     += float(mc[j][posicion][mh ? 6 : 5] / mc[j][posicion][mh ? 8 : 2]);
-
-                                // distancia
-                                if (posicion + 2 < mc[j].size() && ancho_dmr > mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                {
-                                    if (distancia_minima >= mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                        distancia_minima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
-                                    if (distancia_maxima < mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                        distancia_maxima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
-                                    distancia_media += mc[j][posicion + 1][0] - mc[j][posicion][0];
-                                }
-
-                                // número de posiciones detectadas por tipo de mononucleótico
-                                sites_C   += (mc[j][posicion][3] > 0) ? 1 : 0;
-                                sites_nC  += (mc[j][posicion][4] > 0) ? 1 : 0;
-                                sites_mC  += (mc[j][posicion][5] > 0) ? 1 : 0;
-                                sites_hmC += (mc[j][posicion][6] > 0) ? 1 : 0;
-
-                                // número de posiciones detectadas con algún tipo de nucleótido sensible
-                                if (mc[j][posicion][mh ? 8 : 2] > 0)
-                                    posiciones++;
-                            //    posiciones++;
-
-                                posicion++;
-                            //    qDebug() << j << " -> " << mc[j].size() << " - " << posicion;
+                                if (distancia_minima >= mc[j][posicion + 1][0] - mc[j][posicion][0])
+                                    distancia_minima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
+                                if (distancia_maxima < mc[j][posicion + 1][0] - mc[j][posicion][0])
+                                    distancia_maxima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
+                                distancia_media += mc[j][posicion + 1][0] - mc[j][posicion][0];
                             }
 
-                            // valor medio dwt en la región identificada
-                            for (uint i = pos_dwt_ini; i <= pos_dwt_fin; i++)
-                                dwt_valor += h_haar_C[j][i];                    // (h_haar_C[f][i] / (pos_dwt_fin - pos_dwt_ini + 1));
-                            dwt_valor /= (pos_dwt_fin - pos_dwt_ini + 1);
-                        //    dwt_valor = h_haar_C[j][pos_dwt_ini];
+                            // número de posiciones detectadas por tipo de mononucleótico
+                            sites_C   += (mc[j][posicion][3] > 0) ? 1 : 0;
+                            sites_nC  += (mc[j][posicion][4] > 0) ? 1 : 0;
+                            sites_mC  += (mc[j][posicion][5] > 0) ? 1 : 0;
+                            sites_hmC += (mc[j][posicion][6] > 0) ? 1 : 0;
 
-                            // carga de resultado en línea de texto para mostrar
-                            //if ((posiciones > 1 ? cobertura_media / posiciones : cobertura_media) >= (mh ? _hmc_min_coverage : _mc_min_coverage))
-                            if (cobertura_maxima >= (mh ? _hmc_min_coverage : _mc_min_coverage))
-                            {
-                                s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
-                                     QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
-                                     QString::number(posiciones) << " " <<
-                                     QString::number(cobertura_minima >= 500000 ? 0 : cobertura_minima) << " " <<
-                                     QString::number((posiciones > 1) ? cobertura_media / posiciones : cobertura_media) << " " <<
-                                     QString::number(cobertura_maxima) << " " <<
-                                     QString::number(sites_C) << " " <<
-                                     QString::number(sites_nC) << " " <<
-                                     QString::number(sites_mC) << " " <<
-                                     QString::number(sites_hmC) << " " <<
-                                     QString::number(distancia_minima >= 500000 ? 0 : distancia_minima) << " " <<
-                                     QString::number((posiciones > 1) ? distancia_media / posiciones : distancia_media) << " " <<
-                                     QString::number(distancia_maxima) << "\n";
-                            }
-                            else
-                            {
-                                s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
-                                     QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
-                                     "0 0 0 0 0 0 0 0 0 0 0\n";
-                            }
+                            // número de posiciones detectadas con algún tipo de nucleótido sensible
+                            if (mc[j][posicion][mh ? 8 : 2] > 0)
+                                posiciones++;
+                        //    posiciones++;
+
+                            posicion++;
+                        //    qDebug() << j << " -> " << mc[j].size() << " - " << posicion;
+                        }
+
+                        // valor medio dwt en la región identificada
+                        for (uint i = pos_dwt_ini; i <= pos_dwt_fin; i++)
+                            dwt_valor += h_haar_C[j][i];                    // (h_haar_C[f][i] / (pos_dwt_fin - pos_dwt_ini + 1));
+                        dwt_valor = pos_dwt_fin - pos_dwt_ini + 1 != 0 ? dwt_valor / (pos_dwt_fin - pos_dwt_ini + 1) : dwt_valor;
+                    //    dwt_valor = h_haar_C[j][pos_dwt_ini];
+
+                        // carga de resultado en línea de texto para mostrar
+                        //if ((posiciones > 1 ? cobertura_media / posiciones : cobertura_media) >= (mh ? _hmc_min_coverage : _mc_min_coverage))
+                        if (cobertura_maxima >= (mh ? _hmc_min_coverage : _mc_min_coverage))
+                        {
+                            s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
+                                 QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
+                                 QString::number(posiciones) << " " <<
+                                 QString::number(cobertura_minima >= 500000000 ? 0 : cobertura_minima) << " " <<
+                                 QString::number((posiciones > 1) ? cobertura_media / posiciones : cobertura_media) << " " <<
+                                 QString::number(cobertura_maxima) << " " <<
+                                 QString::number(sites_C) << " " <<
+                                 QString::number(sites_nC) << " " <<
+                                 QString::number(sites_mC) << " " <<
+                                 QString::number(sites_hmC) << " " <<
+                                 QString::number(distancia_minima >= 500000000 ? 0 : distancia_minima) << " " <<
+                                 QString::number((posiciones > 1) ? distancia_media / posiciones : distancia_media) << " " <<
+                                 QString::number(distancia_maxima) << "\n";
+                        }
+                        else
+                        {
+                            s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
+                                 QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
+                                 "0 0 0 0 0 0 0 0 0 0 0\n";
                         }
                     }
+                }
 
-                    for (uint j = 0; j < uint(mc.size()); j++)
+                for (uint j = 0; j < uint(mc.size()); j++)
+                {
+                    if (int(mc[j][0][11]) != 0)
                     {
-                        if (int(mc[j][0][11]) != 0)
+                        s << " " << lista_control.at(int(mc[j][0][10])).split("/").back() << " ";
+
+                        int cobertura_minima = 500000000;
+                        int cobertura_maxima = 0;
+                        int cobertura_media  = 0;
+                        int distancia_minima = 500000000;
+                        int distancia_maxima = 0;
+                        int distancia_media  = 0;
+                        int sites_C          = 0;
+                        int sites_nC         = 0;
+                        int sites_mC         = 0;
+                        int sites_hmC        = 0;
+                        int posiciones       = 0;
+                        float dwt_valor      = 0.0;
+                        float ratio_medio    = 0.0;
+
+                        linea_detail.clear();
+
+                        // busca la posición inical
+                        uint posicion = posicion_muestra[j];
+                    //    while (pos_inf > mc[j][posicion][0])
+                    //        posicion++;
+                    //    posicion_muestra[j] = posicion;
+
+                        // búsqueda de valores a lo largo del DMR
+                        while (pos_sup > mc[j][posicion][0] && posicion < mc[j].size() - 2)
                         {
-                            s << " " << lista_control.at(int(mc[j][0][10])).split("/").back() << " ";
+                            // cobertura
+                            if (cobertura_minima >= mc[j][posicion][mh ? 8 : 2])
+                                cobertura_minima = int(mc[j][posicion][mh ? 8 : 2]);
+                            if (cobertura_maxima < mc[j][posicion][mh ? 8 : 2])
+                                cobertura_maxima = int(mc[j][posicion][mh ? 8 : 2]);
+                            cobertura_media += mc[j][posicion][mh ? 8 : 2];
+                            if (mc[j][posicion][mh ? 8 : 2] > 0)
+                                ratio_medio     += float(mc[j][posicion][mh ? 8 : 2] != 0.0 ?
+                                                         mc[j][posicion][mh ? 6 : 5] / mc[j][posicion][mh ? 8 : 2] : 0);
 
-                            int cobertura_minima = 500000;
-                            int cobertura_maxima = 0;
-                            int cobertura_media  = 0;
-                            int distancia_minima = 500000;
-                            int distancia_maxima = 0;
-                            int distancia_media  = 0;
-                            int sites_C          = 0;
-                            int sites_nC         = 0;
-                            int sites_mC         = 0;
-                            int sites_hmC        = 0;
-                            int posiciones       = 0;
-                            float dwt_valor      = 0.0;
-                            float ratio_medio    = 0.0;
-
-                            linea_detail.clear();
-
-                            // busca la posición inical
-                            uint posicion = 0;
-                            while (pos_inf > mc[j][posicion][0])
-                                posicion++;
-
-                            // búsqueda de valores a lo largo del DMR
-                            while (pos_sup > mc[j][posicion][0] && posicion < mc[j].size())
+                            // distancia
+                            if (posicion + 2 < mc[j].size() && ancho_dmr > mc[j][posicion + 1][0] - mc[j][posicion][0])
                             {
-                                // cobertura
-                                if (cobertura_minima >= mc[j][posicion][mh ? 8 : 2])
-                                    cobertura_minima = int(mc[j][posicion][mh ? 8 : 2]);
-                                if (cobertura_maxima < mc[j][posicion][mh ? 8 : 2])
-                                    cobertura_maxima = int(mc[j][posicion][mh ? 8 : 2]);
-                                cobertura_media += mc[j][posicion][mh ? 8 : 2];
-                                if (mc[j][posicion][mh ? 8 : 2] > 0)
-                                    ratio_medio     += float(mc[j][posicion][mh ? 6 : 5] / mc[j][posicion][mh ? 8 : 2]);
-
-                                // distancia
-                                if (posicion + 2 < mc[j].size() && ancho_dmr > mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                {
-                                    if (distancia_minima >= mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                        distancia_minima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
-                                    if (distancia_maxima < mc[j][posicion + 1][0] - mc[j][posicion][0])
-                                        distancia_maxima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
-                                    distancia_media += mc[j][posicion + 1][0] - mc[j][posicion][0];
-                                }
-
-                                // número de posiciones detectadas por tipo de mononucleótico
-                                sites_C   += (mc[j][posicion][3] > 0) ? 1 : 0;
-                                sites_nC  += (mc[j][posicion][4] > 0) ? 1 : 0;
-                                sites_mC  += (mc[j][posicion][5] > 0) ? 1 : 0;
-                                sites_hmC += (mc[j][posicion][6] > 0) ? 1 : 0;
-
-                                // número de posiciones detectadas con algún tipo de nucleótido sensible
-                                if (mc[j][posicion][mh ? 8 : 2] > 0)
-                                    posiciones++;
-                                //posiciones++;
-
-                                posicion++;
-                            //    qDebug() << j << " -> " << mc[j].size() << " - " << posicion;
+                                if (distancia_minima >= mc[j][posicion + 1][0] - mc[j][posicion][0])
+                                    distancia_minima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
+                                if (distancia_maxima < mc[j][posicion + 1][0] - mc[j][posicion][0])
+                                    distancia_maxima = int(mc[j][posicion + 1][0] - mc[j][posicion][0]);
+                                distancia_media += mc[j][posicion + 1][0] - mc[j][posicion][0];
                             }
 
-                            // valor medio dwt en la región identificada
-                            for (uint i = pos_dwt_ini; i <= pos_dwt_fin; i++)
-                                dwt_valor += h_haar_C[j][i];                    // (h_haar_C[f][i] / (pos_dwt_fin - pos_dwt_ini + 1));
-                            dwt_valor /= (pos_dwt_fin - pos_dwt_ini + 1);
-                        //    dwt_valor = h_haar_C[j][pos_dwt_ini];
+                            // número de posiciones detectadas por tipo de mononucleótico
+                            sites_C   += (mc[j][posicion][3] > 0) ? 1 : 0;
+                            sites_nC  += (mc[j][posicion][4] > 0) ? 1 : 0;
+                            sites_mC  += (mc[j][posicion][5] > 0) ? 1 : 0;
+                            sites_hmC += (mc[j][posicion][6] > 0) ? 1 : 0;
 
-                            // carga de resultado en línea de texto para mostrar
-                            //if ((posiciones > 1 ? cobertura_media / posiciones : cobertura_media) >= (mh ? _hmc_min_coverage : _mc_min_coverage))
-                            if (cobertura_maxima >= (mh ? _hmc_min_coverage : _mc_min_coverage))
-                            {
-                                s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
-                                     QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
-                                     QString::number(posiciones) << " " <<
-                                     QString::number(cobertura_minima >= 500000 ? 0 : cobertura_minima) << " " <<
-                                     QString::number((posiciones > 1) ? cobertura_media / posiciones : cobertura_media) << " " <<
-                                     QString::number(cobertura_maxima) << " " <<
-                                     QString::number(sites_C) << " " <<
-                                     QString::number(sites_nC) << " " <<
-                                     QString::number(sites_mC) << " " <<
-                                     QString::number(sites_hmC) << " " <<
-                                     QString::number(distancia_minima >= 500000 ? 0 : distancia_minima) << " " <<
-                                     QString::number((posiciones > 1) ? distancia_media / posiciones : distancia_media) << " " <<
-                                     QString::number(distancia_maxima) << "\n";
-                            }
-                            else
-                            {
-                                s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
-                                     QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
-                                     "0 0 0 0 0 0 0 0 0 0 0\n";
-                            }
+                            // número de posiciones detectadas con algún tipo de nucleótido sensible
+                            if (mc[j][posicion][mh ? 8 : 2] > 0)
+                                posiciones++;
+                            //posiciones++;
+
+                            posicion++;
+                        //    qDebug() << j << " -> " << mc[j].size() << " - " << posicion;
+                        }
+
+                        // valor medio dwt en la región identificada
+                        for (uint i = pos_dwt_ini; i <= pos_dwt_fin; i++)
+                            dwt_valor += h_haar_C[j][i];                    // (h_haar_C[f][i] / (pos_dwt_fin - pos_dwt_ini + 1));
+                        dwt_valor = pos_dwt_fin - pos_dwt_ini + 1 ? dwt_valor / (pos_dwt_fin - pos_dwt_ini + 1) : dwt_valor;
+                    //    dwt_valor = h_haar_C[j][pos_dwt_ini];
+
+                        // carga de resultado en línea de texto para mostrar
+                        //if ((posiciones > 1 ? cobertura_media / posiciones : cobertura_media) >= (mh ? _hmc_min_coverage : _mc_min_coverage))
+                        if (cobertura_maxima >= (mh ? _hmc_min_coverage : _mc_min_coverage))
+                        {
+                            s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
+                                 QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
+                                 QString::number(posiciones) << " " <<
+                                 QString::number(cobertura_minima >= 500000000 ? 0 : cobertura_minima) << " " <<
+                                 QString::number((posiciones > 1) ? cobertura_media / posiciones : cobertura_media) << " " <<
+                                 QString::number(cobertura_maxima) << " " <<
+                                 QString::number(sites_C) << " " <<
+                                 QString::number(sites_nC) << " " <<
+                                 QString::number(sites_mC) << " " <<
+                                 QString::number(sites_hmC) << " " <<
+                                 QString::number(distancia_minima >= 500000000 ? 0 : distancia_minima) << " " <<
+                                 QString::number((posiciones > 1) ? distancia_media / posiciones : distancia_media) << " " <<
+                                 QString::number(distancia_maxima) << "\n";
+                        }
+                        else
+                        {
+                            s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
+                                 QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
+                                 "0 0 0 0 0 0 0 0 0 0 0\n";
                         }
                     }
-               }
+                }
+//               }
 
                 s << "\n";
-            //    qDebug() << "fin dmr: " << i;
-*/
+                //qDebug() << "fin escritura en fichero dmr: " << i;
             }
         }
         else
@@ -2225,6 +2210,8 @@ void HPG_Dhunter::enabling_widgets (bool arg)
     ui->single_samples->setEnabled(arg);
     ui->mC_cobertura->setEnabled(arg & _mc);
     ui->hmC_cobertura->setEnabled(arg & _hmc);
+    ui->min_CpG_x_region->setEnabled(arg);
+    ui->min_covSamples_x_region->setEnabled(arg);
     ui->threshold->setEnabled(arg);
     ui->dmr_dwt_level->setEnabled(arg);
 }

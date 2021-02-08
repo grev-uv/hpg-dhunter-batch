@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     HPG_Dhunter w;
 
     w.setWindowTitle("DMR identification with DWT - vFDD");
-    w.setStyleSheet("QMainWondow {background: 'grey';}");
+//    w.setStyleSheet("QMainWindow {background: 'grey';}");
     w.setWindowIcon(QIcon(":/images/icon.png"));
 
     w.show();

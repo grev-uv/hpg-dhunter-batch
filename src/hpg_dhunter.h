@@ -239,7 +239,6 @@ private:
       *  \param fichero             string con nombre directorio seleccionado
       *  \param ficheros_case       stringlist con nombre de todos los directorios seleccionados como casos
       *  \param ficheros_control    stringlist con nombre de los directorios seleccionados como control
-      *  \param chrom_sizes         lista de los tamaños de cada uno de los cromosomas analizados
       *  \param fichero_gff         string con nombre de fichero en formato gff
       *  \param region_gff          contador de DMRs para numerar en fichero gff
       * ***********************************************************************************************
@@ -247,7 +246,6 @@ private:
     QString     fichero;
     QStringList ficheros_case;
     QStringList ficheros_control;
-    QList <int> chrom_sizes;
     QString     fichero_gff;
     uint        region_gff;
 

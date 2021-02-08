@@ -52,7 +52,7 @@ OBJECTS_DIR  = $$DESTDIR/Obj
 #-----------------------------cuda settings----------------------------
 #----------------------------------------------------------------------
 # cuda sources
-CUDA_SOURCES += haar_v6.cu
+CUDA_SOURCES += haar_v10.cu
 
 # path to cuda sdk installation
 CUDA_DIR      = /usr/local/cuda
@@ -61,7 +61,8 @@ CUDA_DIR      = /usr/local/cuda
 INCLUDEPATH  += $$CUDA_DIR/include
 QMAKE_LIBDIR += $$CUDA_DIR/lib64
 
-# suda architecture
+# cuda architecture
+#CUDA_ARCH    = sm_35       # minimum compute capability (version) for dynamic parallelism feature support
 CUDA_ARCH     = sm_61
 #CUDA_ARCH    = sm_50
 #CUDA_ARCH    = sm_52
@@ -134,7 +135,7 @@ cuda.depend_command  = $$CUDA_DIR/bin/nvcc \
 QMAKE_EXTRA_COMPILERS += cuda
 
 DISTFILES += \
-    haar_v6.cu
+    haar_v10.cu
 
 RESOURCES += \
     recursos.qrc

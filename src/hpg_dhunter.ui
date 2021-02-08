@@ -456,7 +456,7 @@ control folder</string>
          <widget class="QLabel" name="label_9">
           <property name="minimumSize">
            <size>
-            <width>120</width>
+            <width>124</width>
             <height>0</height>
            </size>
           </property>
@@ -475,11 +475,16 @@ control folder</string>
         </item>
         <item>
          <widget class="QSlider" name="mC_cobertura">
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="minimum">
            <number>1</number>
           </property>
           <property name="maximum">
-           <number>1000</number>
+           <number>500</number>
           </property>
           <property name="value">
            <number>100</number>
@@ -502,6 +507,11 @@ control folder</string>
             <width>50</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
           </property>
           <property name="inputMask">
            <string>999</string>
@@ -528,7 +538,7 @@ control folder</string>
          <widget class="QLabel" name="label">
           <property name="minimumSize">
            <size>
-            <width>120</width>
+            <width>124</width>
             <height>0</height>
            </size>
           </property>
@@ -547,8 +557,16 @@ control folder</string>
           <property name="enabled">
            <bool>false</bool>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="minimum">
+           <number>1</number>
+          </property>
           <property name="maximum">
-           <number>1000</number>
+           <number>500</number>
           </property>
           <property name="value">
            <number>100</number>
@@ -572,6 +590,11 @@ control folder</string>
             <height>16777215</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
           <property name="inputMask">
            <string>999</string>
           </property>
@@ -586,12 +609,97 @@ control folder</string>
        </layout>
       </item>
       <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_16">
+        <item>
+         <widget class="QLabel" name="label_2">
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>min. #Samples w/cov</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSlider" name="min_covSamples_x_region">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="minimum">
+           <number>30</number>
+          </property>
+          <property name="maximum">
+           <number>100</number>
+          </property>
+          <property name="value">
+           <number>50</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_10">
+          <property name="minimumSize">
+           <size>
+            <width>30</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="text">
+           <string>50</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="label_13">
+          <property name="minimumSize">
+           <size>
+            <width>15</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>%</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_15">
         <item>
          <widget class="QLabel" name="label_6">
           <property name="minimumSize">
            <size>
-            <width>120</width>
+            <width>124</width>
             <height>0</height>
            </size>
           </property>
@@ -609,20 +717,28 @@ control folder</string>
          <widget class="QSlider" name="min_CpG_x_region">
           <property name="minimumSize">
            <size>
-            <width>346</width>
+            <width>0</width>
             <height>0</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="minimum">
-           <number>0</number>
+           <number>1</number>
           </property>
           <property name="maximum">
-           <number>100</number>
+           <number>50</number>
           </property>
           <property name="pageStep">
-           <number>10</number>
+           <number>5</number>
           </property>
           <property name="value">
+           <number>7</number>
+          </property>
+          <property name="sliderPosition">
            <number>7</number>
           </property>
           <property name="orientation">
@@ -634,9 +750,14 @@ control folder</string>
          <widget class="QLabel" name="label_11">
           <property name="minimumSize">
            <size>
-            <width>35</width>
+            <width>30</width>
             <height>0</height>
            </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
           </property>
           <property name="text">
            <string>7</string>
@@ -648,6 +769,17 @@ control folder</string>
         </item>
         <item>
          <widget class="QLabel" name="label_12">
+          <property name="minimumSize">
+           <size>
+            <width>15</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="text">
            <string>%</string>
           </property>
@@ -661,7 +793,7 @@ control folder</string>
          <widget class="QLabel" name="label_4">
           <property name="minimumSize">
            <size>
-            <width>120</width>
+            <width>124</width>
             <height>0</height>
            </size>
           </property>
@@ -683,11 +815,16 @@ control folder</string>
           <property name="enabled">
            <bool>true</bool>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="value">
-           <number>40</number>
+           <number>30</number>
           </property>
           <property name="sliderPosition">
-           <number>40</number>
+           <number>30</number>
           </property>
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
@@ -702,8 +839,13 @@ control folder</string>
             <height>0</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
+          </property>
           <property name="text">
-           <string>0.4</string>
+           <string>0.3</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignCenter</set>
@@ -718,7 +860,7 @@ control folder</string>
          <widget class="QLabel" name="label_7">
           <property name="minimumSize">
            <size>
-            <width>120</width>
+            <width>124</width>
             <height>0</height>
            </size>
           </property>
@@ -737,6 +879,11 @@ control folder</string>
         </item>
         <item>
          <widget class="QSlider" name="dmr_dwt_level">
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="minimum">
            <number>1</number>
           </property>
@@ -758,6 +905,11 @@ control folder</string>
             <width>50</width>
             <height>0</height>
            </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>11</pointsize>
+           </font>
           </property>
           <property name="text">
            <string>6</string>
@@ -887,6 +1039,22 @@ control folder</string>
     <hint type="destinationlabel">
      <x>506</x>
      <y>584</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>min_covSamples_x_region</sender>
+   <signal>valueChanged(int)</signal>
+   <receiver>label_10</receiver>
+   <slot>setNum(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>375</x>
+     <y>561</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>506</x>
+     <y>565</y>
     </hint>
    </hints>
   </connection>
