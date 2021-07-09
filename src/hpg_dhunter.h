@@ -209,15 +209,6 @@ private slots:
     void refGen_worker_acabado(ulong);
 
     /** ***********************************************************************************************
-      * \fn void on_grouped_samples_stateChanged(int) and one more
-      *  \brief Funciones responsables de definir tipo de análisis -> muestras agrupadas o individuales
-      *  \param arg1   activado / desactivado
-      * ***********************************************************************************************
-      */
-    void on_grouped_samples_stateChanged(int arg1);
-    void on_single_samples_stateChanged(int arg1);
-
-    /** ***********************************************************************************************
       * \fn void on_genome_reference_currentIndexChanged(int index)
       *  \brief Función responsable de seleccionar genoma de referencia
       *  \param index   indice en la tabla de genomas de referencia
@@ -280,8 +271,6 @@ private:
       *  \param _forward            selecciona análisis de ficheros forward
       *  \param _reverse            selecciona análisis de ficheros reverse
       *  \param _all_chroms         selecciona análisis de todos los cromosomas
-      *  \param _grouped_samples    selecciona análisis por mUestras agrupadas
-      *  \param _single_samples     selecciona análisis por muestras individuales
       *  \param chrom-list          listado de cromosomas a analizar
       *  \param _mc_min_coverage    valor de mínima cobertura para análisis por metilación
       *  \param _hmc_min_coverage   valor de mínima cobertura para análisis por hidroximetilación
@@ -294,8 +283,6 @@ private:
     bool  _forward;
     bool  _reverse;
     bool  _all_chroms;
-    bool  _grouped_samples;
-    bool  _single_samples;
     QList <int> chrom_list;
     int   _mc_min_coverage;
     int   _hmc_min_coverage;
@@ -340,13 +327,11 @@ private:
     /** ***********************************************************************************************
       *  \brief variables para control de datos por muestras y resultados de transformación en GPU
       *  \param mc          matriz con datos de metilación, cobertura y conteo por muestra y posición
-      *  \param mc_grouped  matriz con datos de metilaxión, cobertura y conteo con muestras agrupadas
       *  \param h_haar_C    matriz de recepción de resultados de transformación wavelet
       *  \param posicion_metilada   acumulación de posiciones metiladas para validar DMR
       * ***********************************************************************************************
       */
     vector<vector<vector<double>>> mc;
-    vector<vector<vector<double>>> mc_grouped;
     vector<vector<float>>         h_haar_C;
     vector<vector<uint>>          posicion_metilada;
 

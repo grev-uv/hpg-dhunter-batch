@@ -54,8 +54,6 @@ HPG_Dhunter::HPG_Dhunter(QWidget *parent) :
     _forward         = true;
     _reverse         = true;
     _all_chroms      = true;
-    _grouped_samples = false;
-    _single_samples  = true;
 
     // inicialización de variables para cálculo de DMRs
     _mc_min_coverage   = ui->mC_cobertura->value();
@@ -627,8 +625,6 @@ void HPG_Dhunter::cromosoma_leido(int chrom)
         // limpia las matrices de datos del cromosoma anterior
         vector<vector<vector<double>>>().swap(mc);
 
-        vector<vector<vector<double>>>().swap(mc_grouped);
-
         ui->statusBar->showMessage("reading next chromosome...");
 
         // borra todos los hilos creados
@@ -844,8 +840,6 @@ void HPG_Dhunter::on_start_clicked()
 
         vector<vector<vector<double>>>().swap(mc);
 
-        vector<vector<vector<double>>>().swap(mc_grouped);
-
         // borra todos los posibles hilos creados anteriormente
         foreach(QThread *i, hilo_files_worker)
             delete i;
@@ -947,47 +941,6 @@ void HPG_Dhunter::lectura_acabada()
     if ((dimension & 0x01) == 1)
         dimension++;
 
-    if (ui->grouped_samples->isChecked())
-    {
-        // modifica matriz mc para adecuarla al trabajo con muestras agrupadas por casos y control -------------
-        // inicializa matriz agrupada
-        mc_grouped.resize(2, vector<vector<double>>(dimension, vector<double>(mc[0][0].size(), 0.0)));
-
-        // copia datos informativos y acumula datos cuantitativos por posición de mc en mc_grouped
-        for (uint s = 0; s < mc.size(); s++)
-        {
-            for (uint p = 0; p < mc[s].size(); p++)
-            {
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][0]  = mc[s][p][0];   // guarda la posición
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][2] += mc[s][p][2];   // acumula la cobertura mC
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][3] += mc[s][p][3];   // acumula el número de reads con C
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][4] += mc[s][p][4];   // acumula el número de reads con no C
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][5] += mc[s][p][5];   // acumula el número de reads con mC
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][6] += mc[s][p][6];   // acumula el número de reads con hmC
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][8] += mc[s][p][8];   // acumula la cobertura hmC
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][9]  = mc[s][p][9];   // guarda el cromosoma analizado
-                mc_grouped[uint(mc[s][0][11])][uint(mc[s][p][0] - limite_inferior)][11] = mc[s][p][11];  // guarda si es caso o control (0/1)
-            }
-        }
-
-        // calcula los ratios de cada grupo
-        for (uint p = 0; p < mc_grouped[0].size(); p++)
-        {
-            // ratio mC grupo casos
-            if (mc_grouped[0][p][2] > 0)
-                mc_grouped[0][p][1] = mc_grouped[0][p][5] / mc_grouped[0][p][2];
-            // ratio hmC grupo casos
-            if (mc_grouped[0][p][8] > 0)
-                mc_grouped[0][p][7] = mc_grouped[0][p][6] / mc_grouped[0][p][8];
-            // ratio mC grupo control
-            if (mc_grouped[1][p][2] > 0)
-                mc_grouped[1][p][1] = mc_grouped[1][p][5] / mc_grouped[1][p][2];
-            // ratio hmC grupo control
-            if (mc_grouped[1][p][8] > 0)
-                mc_grouped[1][p][7] = mc_grouped[1][p][6] / mc_grouped[1][p][8];
-        }
-    }
-
     // realiza la operación de carga en GPU y de identificación de DMRs para mC y hmC seleccionadas
     // mh = 0 -> analiza mC si está seleccionado este análisis
     // mh = 1 -> analiza hmC si está seleccionado este análisis
@@ -998,8 +951,14 @@ void HPG_Dhunter::lectura_acabada()
             // limpia matriz de resultados de procesamiento en GPU
             vector<vector<float>>().swap(h_haar_C);
 
-            // realiza el cálculo de DWT en GPU con datos según modelo elegido (por grupo o individual)
-            if (ui->grouped_samples->isChecked())
+            // realiza el cálculo de DWT en GPU
+            // selecciona bloques de filas de mc para procesar en GPU hasta que procesa toda la matriz mc
+            uint filas_procesadas = 0;
+            uint filas_a_GPU      = 1;
+
+            vector<vector<uint>>(uint(mc.size()), vector<uint>()).swap(posicion_metilada);
+
+            while (filas_procesadas < mc.size())
             {
                 // borra la memoria utilizada por cuda_data.mc_full
                 if (cuda_data.mc_full != nullptr)
@@ -1015,8 +974,27 @@ void HPG_Dhunter::lectura_acabada()
                     delete [] cuda_data.h_haar_C;
                 }
 
+                // calcula el tamaño de la matriz de datos
+                filas_a_GPU  = 1;
+                uint tamanyo = dimension * filas_a_GPU * sizeof(float) / (1024 * 1024);  // tamaño en MiB
+
+                // calcula el número de filas de mc que puede procesar en GPU simultaneamente
+                while (tamanyo < 0.5 * memory_available)
+                {
+                    if (filas_a_GPU + filas_procesadas < mc.size())
+                        filas_a_GPU++;
+                    else
+                        break;
+
+                    tamanyo = dimension * filas_a_GPU * sizeof(float) / (1024 * 1024);  // tamaño en MiB
+                }
+
+                filas_procesadas += filas_a_GPU;
+
+                qDebug() << "-----  hola 3 " << "- filas procesadas / GPU" << filas_procesadas << "/" << filas_a_GPU;
+
                 // actualiza estructura de datos
-                cuda_data.samples        = 2;                                       // número de ficheros a analizar
+                cuda_data.samples        = int(filas_a_GPU);                        // número de ficheros a analizar
                 cuda_data.sample_num     = dimension;                               // cantidad de datos por fichero
                 cuda_data.rango_inferior = 0;                                       // primer valor cromosoma
                 cuda_data.rango_superior = limite_superior - limite_inferior;       // último valor
@@ -1024,81 +1002,40 @@ void HPG_Dhunter::lectura_acabada()
                 cuda_data.data_adjust    = 0;                                       // ajuste desfase en división por nivel para número impar de datos
                 cuda_data.h_haar_L.clear();                                         // vector con número de datos por nivel
 
-                // .crea matriz ampliada ----------------------------------------------------------
+                // crea matriz ampliada -------------------------------------------------------------------
                 //      -> vectores con todas las posiciones contiguas
                 //      -> con ceros en las posiciones sin metilación
-                // .reserva TODA la memoria CONTIGUA con todos los datos de los dos grupos
+                // reserva TODA la memoria CONTIGUA con todos los datos de todas las muestras
                 // para trasvase de datos entre GPU y CPU con CUDA, la matriz debe ser contigua completa
-                // .reserva la memoria para la matriz de datos extendida
-                cuda_data.mc_full    = new float*[cuda_data.samples];
-                cuda_data.mc_full[0] = new float[uint(cuda_data.samples) * cuda_data.sample_num];
-                cuda_data.mc_full[1] = cuda_data.mc_full[0] + cuda_data.sample_num;
-
-                posicion_metilada.clear();
-                posicion_metilada.assign(2, vector<uint> (dimension, 0));
+                // reserva la memoria para la matriz de datos extendida
+                cuda_data.mc_full = new float*[cuda_data.samples];
+                cuda_data.mc_full[0] = new float[uint(cuda_data.samples) * cuda_data.sample_num]();
+                for (int i = 1; i < cuda_data.samples; i++)
+                        cuda_data.mc_full[i] = cuda_data.mc_full[i - 1] + cuda_data.sample_num;
 
                 // copia de todos los datos a la matriz ampliada
-                // --------------------------------------------------------------------------------
-                uint cuenta_posiciones_metiladas;
-                uint pos_met;
-                for (uint m = 0; m < 2; m++)
+                // --------------------------------------------------------------------------------------------
+                //for (uint m = filas_procesadas - filas_a_GPU; m < filas_procesadas; m++)
+                //uint cuenta_posiciones_metiladas;
+                //uint pos_met;
+                for (uint m = 0; m < uint(cuda_data.samples); m++)
                 {
-                    cuenta_posiciones_metiladas = 0;
-                    pos_met                     = 1;
+                    // rellenar con datos las posiciones metiladas si la cobertura es mayor que el umbral
+                    uint posicion = m + filas_procesadas - filas_a_GPU;
 
-                    // rellenar de ceros la matriz de datos
-                    for (uint n = 0; n < cuda_data.sample_num + 1; ++n)
-                        cuda_data.mc_full [m][n] = 0.0;
-
-                    // rellena con datos las posiciones metiladas si la cobertura es mayor que el umbral
-                    if (mh == 0)
+                    for (uint k = 0; k < mc[posicion].size(); k++)
                     {
-                        for (uint n = 0; n < dimension; n++)
-                            if(mc_grouped[m][n][2] >= _mc_min_coverage)
-                            {
-                                cuda_data.mc_full[m][n] = float(mc_grouped[m][n][1]);
-
-                                cuenta_posiciones_metiladas++;
-                                while (pos_met < n)
-                                {
-                                    posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas - 1;
-                                    pos_met++;
-                                }
-                                posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas;
-                            }
-                        pos_met++;
-                        while (pos_met < posicion_metilada[m].size())
+                        if(mc[posicion][k][(mh == 0 ? 2 : 8)] >= (mh == 0 ? _mc_min_coverage : _hmc_min_coverage))
                         {
-                            posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas;
-                            pos_met++;
-                        }
-                    }
-                    else
-                    {
-                        for (uint n = 0; n < dimension; n++)
-                            if(mc_grouped[m][n][8] >= _hmc_min_coverage)
-                            {
-                                cuda_data.mc_full [m][n] = float(mc_grouped[m][n][7]);
+                            cuda_data.mc_full [m][uint(mc[posicion][k][0]) - limite_inferior] = float(mc[posicion][k][(mh == 0 ? 1 : 7)]);
 
-                                cuenta_posiciones_metiladas++;
-                                while (pos_met < n)
-                                {
-                                    posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas - 1;
-                                    pos_met++;
-                                }
-                                posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas;
-                            }
-                        pos_met++;
-                        while (pos_met < posicion_metilada[m].size())
-                        {
-                            posicion_metilada[m][pos_met] = cuenta_posiciones_metiladas;
-                            pos_met++;
+                            posicion_metilada[posicion].push_back(uint(mc[posicion][k][0] - limite_inferior));
                         }
                     }
                 }
 
                 // envía los datos a la memoria global de la GPU
-                // --------------------------------------------------------------------------------
+                // --------------------------------------------------------------------------------------------
                 // libera la memoria de la GPU
                 cuda_end(cuda_data);
 
@@ -1110,7 +1047,7 @@ void HPG_Dhunter::lectura_acabada()
                 cuda_main(cuda_data);
 
                 // recoge los resultados en una matriz, acumulando todos los resultados
-                vector<float> aux(ulong(cuda_data.h_haar_L[0]), 0.0);
+                vector<float> aux(uint(cuda_data.h_haar_L[0]), 0.0);
                 for (int i = 0; i < cuda_data.samples; i++)
                 {
                     for (size_t j = 0; j < size_t(cuda_data.h_haar_L[0]); j++)
@@ -1119,133 +1056,25 @@ void HPG_Dhunter::lectura_acabada()
                     h_haar_C.push_back(aux);
                 }
             }
-            else
-            {
-                // selecciona bloques de filas de mc para procesar en GPU hasta que procesa toda la matriz mc
-                uint filas_procesadas = 0;
-                uint filas_a_GPU      = 1;
 
-                vector<vector<uint>>(uint(mc.size()), vector<uint>()).swap(posicion_metilada);
+            // comprueba la memoria disponible en la tarjeta gráfica para controlar los ficheros a cargar
+            // ..captura la información suministrada por el comando "nvidia-smi"
+            QProcess p;
+            p.start("nvidia-smi");
+            p.waitForFinished();
+            QString data = p.readAllStandardOutput();
+            p.close();
 
-                while (filas_procesadas < mc.size())
-                {
-                    // borra la memoria utilizada por cuda_data.mc_full
-                    if (cuda_data.mc_full != nullptr)
-                    {
-                        delete [] cuda_data.mc_full[0];
-                        delete [] cuda_data.mc_full;
-                    }
+            // ..busca los datos que concuerdan con "[[:digit:]]+MiB" y se queda con el segundo dato
+            //   que informa de la capacidad de memoria disponible de la tarjeta
+            QRegularExpression re("(\\d+)MiB");
+            QRegularExpressionMatchIterator i = re.globalMatch(data);
+            QRegularExpressionMatch match_1 = i.next();
+            QRegularExpressionMatch match_2 = i.next();
+            qDebug() << "memoria GPU ocupada / total ----> " << match_1.captured(1) << "/" << match_2.captured(1);
 
-                    // borra la memoria utilizada por cuda_data.h_haar_C
-                    if (cuda_data.h_haar_C != nullptr)
-                    {
-                        delete [] cuda_data.h_haar_C[0];
-                        delete [] cuda_data.h_haar_C;
-                    }
-
-                    // calcula el tamaño de la matriz de datos
-                    filas_a_GPU  = 1;
-                    uint tamanyo = dimension * filas_a_GPU * sizeof(float) / (1024 * 1024);  // tamaño en MiB
-
-                    // calcula el número de filas de mc que puede procesar en GPU simultaneamente
-                    while (tamanyo < 0.5 * memory_available)
-                    {
-                        if (filas_a_GPU + filas_procesadas < mc.size())
-                            filas_a_GPU++;
-                        else
-                            break;
-
-                        tamanyo = dimension * filas_a_GPU * sizeof(float) / (1024 * 1024);  // tamaño en MiB
-                    }
-
-                    filas_procesadas += filas_a_GPU;
-
-                    qDebug() << "-----  hola 3 " << "- filas procesadas / GPU" << filas_procesadas << "/" << filas_a_GPU;
-
-                    // actualiza estructura de datos
-                    cuda_data.samples        = int(filas_a_GPU);                        // número de ficheros a analizar
-                    cuda_data.sample_num     = dimension;                               // cantidad de datos por fichero
-                    cuda_data.rango_inferior = 0;                                       // primer valor cromosoma
-                    cuda_data.rango_superior = limite_superior - limite_inferior;       // último valor
-                    cuda_data.levels         = ui->dmr_dwt_level->value();              // número de niveles a transformar
-                    cuda_data.data_adjust    = 0;                                       // ajuste desfase en división por nivel para número impar de datos
-                    cuda_data.h_haar_L.clear();                                         // vector con número de datos por nivel
-
-                    // crea matriz ampliada -------------------------------------------------------------------
-                    //      -> vectores con todas las posiciones contiguas
-                    //      -> con ceros en las posiciones sin metilación
-                    // reserva TODA la memoria CONTIGUA con todos los datos de todas las muestras
-                    // para trasvase de datos entre GPU y CPU con CUDA, la matriz debe ser contigua completa
-                    // reserva la memoria para la matriz de datos extendida
-                    cuda_data.mc_full = new float*[cuda_data.samples];
-                    cuda_data.mc_full[0] = new float[uint(cuda_data.samples) * cuda_data.sample_num]();
-                    for (int i = 1; i < cuda_data.samples; i++)
-                            cuda_data.mc_full[i] = cuda_data.mc_full[i - 1] + cuda_data.sample_num;
-
-                    // copia de todos los datos a la matriz ampliada
-                    // --------------------------------------------------------------------------------------------
-                    //for (uint m = filas_procesadas - filas_a_GPU; m < filas_procesadas; m++)
-                    //uint cuenta_posiciones_metiladas;
-                    //uint pos_met;
-                    for (uint m = 0; m < uint(cuda_data.samples); m++)
-                    {
-                        // rellenar con datos las posiciones metiladas si la cobertura es mayor que el umbral
-                        uint posicion = m + filas_procesadas - filas_a_GPU;
-
-                        for (uint k = 0; k < mc[posicion].size(); k++)
-                        {
-                            if(mc[posicion][k][(mh == 0 ? 2 : 8)] >= (mh == 0 ? _mc_min_coverage : _hmc_min_coverage))
-                            {
-                                cuda_data.mc_full [m][uint(mc[posicion][k][0]) - limite_inferior] = float(mc[posicion][k][(mh == 0 ? 1 : 7)]);
-
-                                posicion_metilada[posicion].push_back(uint(mc[posicion][k][0] - limite_inferior));
-                            }
-                        }
-                    }
-
-                    // envía los datos a la memoria global de la GPU
-                    // --------------------------------------------------------------------------------------------
-                    // libera la memoria de la GPU
-                    cuda_end(cuda_data);
-
-                    // envía el total de los datos a la GPU
-                    cuda_send_data(cuda_data);
-
-                    // procesado de los datos
-                    cuda_calculo_haar_L(cuda_data);
-                    cuda_main(cuda_data);
-
-                    // recoge los resultados en una matriz, acumulando todos los resultados
-                    vector<float> aux(uint(cuda_data.h_haar_L[0]), 0.0);
-                    for (int i = 0; i < cuda_data.samples; i++)
-                    {
-                        for (size_t j = 0; j < size_t(cuda_data.h_haar_L[0]); j++)
-                            aux[j] = cuda_data.h_haar_C[i][j];
-
-                        h_haar_C.push_back(aux);
-                    }
-                }
-
-                // comprueba la memoria disponible en la tarjeta gráfica para controlar los ficheros a cargar
-                // ..captura la información suministrada por el comando "nvidia-smi"
-                QProcess p;
-                p.start("nvidia-smi");
-                p.waitForFinished();
-                QString data = p.readAllStandardOutput();
-                p.close();
-
-                // ..busca los datos que concuerdan con "[[:digit:]]+MiB" y se queda con el segundo dato
-                //   que informa de la capacidad de memoria disponible de la tarjeta
-                QRegularExpression re("(\\d+)MiB");
-                QRegularExpressionMatchIterator i = re.globalMatch(data);
-                QRegularExpressionMatch match_1 = i.next();
-                QRegularExpressionMatch match_2 = i.next();
-                qDebug() << "memoria GPU ocupada / total ----> " << match_1.captured(1) << "/" << match_2.captured(1);
-
-                // ..se asigna a la variable el valor en MiB
-                memory_available = match_2.captured(1).toInt() - match_1.captured(1).toInt();
-
-            }
+            // ..se asigna a la variable el valor en MiB
+            memory_available = match_2.captured(1).toInt() - match_1.captured(1).toInt();
 
             qDebug() << "tamaño final matriz de datos h_haar_C: " << h_haar_C.size() << "x" << h_haar_C.at(0).size()
                      << " y pos_met:" << posicion_metilada.size() << posicion_metilada.at(0).size();
@@ -1294,92 +1123,80 @@ void HPG_Dhunter::find_dmrs()
 
     uint paso = uint(pow(2, ui->dmr_dwt_level->value()));
 
-    if (ui->grouped_samples->isChecked())
+    qDebug() << "----------- buscando DMRs por muestras individuales ----------";
+    uint contador = 0;
+    uint cont_diff = 0;
+
+    int ultimo_m = 0;
+
+    vector<uint> idx_pos_met (uint(mc.size()), 0);
+
+    // realiza el cálculo de medias de las muestras de control y de los casos con cobertura sobre umbral
+    for (uint m = 0; m < uint(cuda_data.h_haar_L[0]); m++) // ...en cada posición
     {
-        qDebug() << "----------- buscando DMRs por agrupamiento de muestras ----------";
-        for (uint m = 0; m < uint(cuda_data.h_haar_L[0]); m++)
-            if (((m + 1) * paso < posicion_metilada[0].size() ? posicion_metilada[0][(m + 1) * paso] : posicion_metilada[0].back()) >
-                    posicion_metilada[0][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) * 0.01) &&
-                ((m + 1) * paso < posicion_metilada[1].size() ? posicion_metilada[1][(m + 1) * paso] : posicion_metilada[1].back()) >
-                    posicion_metilada[1][m * paso] + (paso * uint(ui->min_CpG_x_region->value()) * 0.01))
-                dmr_diff[m] = h_haar_C[0][m] - h_haar_C[1][m];
-    }
-    else
-    {
-        qDebug() << "----------- buscando DMRs por muestras individuales ----------";
-        uint contador = 0;
-        uint cont_diff = 0;
+        float media_casos   = 0.0;
+        float media_control = 0.0;
+        numero_casos        = 0;
+        numero_control      = 0;
 
-        int ultimo_m = 0;
-
-        vector<uint> idx_pos_met (uint(mc.size()), 0);
-
-        // realiza el cálculo de medias de las muestras de control y de los casos con cobertura sobre umbral
-        for (uint m = 0; m < uint(cuda_data.h_haar_L[0]); m++) // ...en cada posición
+        for (uint i = 0; i < h_haar_C.size(); i++)
         {
-            float media_casos   = 0.0;
-            float media_control = 0.0;
-            numero_casos        = 0;
-            numero_control      = 0;
+            uint aux_1 = 0;
+            uint aux_2 = 0;
 
-            for (uint i = 0; i < h_haar_C.size(); i++)
+            while (m * paso >= posicion_metilada[i][idx_pos_met[i] + aux_1] && idx_pos_met[i] + aux_1 < posicion_metilada[i].size() - 1)
+                aux_1++;
+
+            aux_2 = aux_1;
+
+            while ((m + 1) * paso > posicion_metilada[i][idx_pos_met[i] + aux_2] && idx_pos_met[i] + aux_2 < posicion_metilada[i].size() - 1)
+                aux_2++;
+
+            idx_pos_met[i] += aux_2;
+
+            if (aux_2 - aux_1 >= paso * uint(ui->min_CpG_x_region->value()) * 0.01)
             {
-                uint aux_1 = 0;
-                uint aux_2 = 0;
-
-                while (m * paso >= posicion_metilada[i][idx_pos_met[i] + aux_1] && idx_pos_met[i] + aux_1 < posicion_metilada[i].size() - 1)
-                    aux_1++;
-
-                aux_2 = aux_1;
-
-                while ((m + 1) * paso > posicion_metilada[i][idx_pos_met[i] + aux_2] && idx_pos_met[i] + aux_2 < posicion_metilada[i].size() - 1)
-                    aux_2++;
-
-                idx_pos_met[i] += aux_2;
-
-                if (aux_2 - aux_1 >= paso * uint(ui->min_CpG_x_region->value()) * 0.01)
+                if (int(mc[i][0][11]) == 0)
                 {
-                    if (int(mc[i][0][11]) == 0)
-                    {
-                        media_control += h_haar_C[i][m];
-                        numero_control++;
-                    }
-                    else
-                    {
-                        media_casos += h_haar_C[i][m];
-                        numero_casos++;
-                    }
+                    media_control += h_haar_C[i][m];
+                    numero_control++;
                 }
-            }
-
-            //if (numero_casos > 0 && numero_control > 0)                                                                    // al menos una muestra por grupo tiene cobertura
-            if (numero_casos   > (uint(lista_casos.length()   * (ui->min_covSamples_x_region->value() * 0.01))) &&
-                numero_control > (uint(lista_control.length() * (ui->min_covSamples_x_region->value() * 0.01))))             // al menos el XX% por grupo tienen cobertura
-            //if (numero_casos == uint(lista_casos.length()) && numero_control == uint(lista_control.length()))              // todas las muestras tienen cobertura
-            {
-                // guada diferencias solo si caso y control han resultado diferentes de cero -> hay cobertura mínima en, al menos, una muestra de caso y control
-                dmr_diff[m] = (media_casos / numero_casos) - (media_control / numero_control);
-
-                // para control de programa (a borrar)
-                ultimo_m = int(m);
-                contador++;
-
-
-            //    if (contador > 4000)
-            //        qDebug() << dmr_diff[m];
-
-
-                if (dmr_diff[m] < -_threshold || dmr_diff[m] > _threshold)
+                else
                 {
-                    cont_diff++;
+                    media_casos += h_haar_C[i][m];
+                    numero_casos++;
                 }
             }
         }
-        qDebug() << "número de ventanas dwt con valor > 0 " << contador
-                 << " número de ventanas con diff mayor que umbral: " << cont_diff
-                 << " ultimo eme: " << ultimo_m
-                 << " diferencia último: " << dmr_diff[ultimo_m];
+
+        //if (numero_casos > 0 && numero_control > 0)                                                                    // al menos una muestra por grupo tiene cobertura
+        if (numero_casos   >= (uint(lista_casos.length()   * (ui->min_covSamples_x_region->value() * 0.01))) &&
+            numero_control >= (uint(lista_control.length() * (ui->min_covSamples_x_region->value() * 0.01))))             // al menos el XX% por grupo tienen cobertura
+        //if (numero_casos == uint(lista_casos.length()) && numero_control == uint(lista_control.length()))              // todas las muestras tienen cobertura
+        {
+            // guada diferencias solo si caso y control han resultado diferentes de cero -> hay cobertura mínima en, al menos, una muestra de caso y control
+            dmr_diff[m] = (media_casos / numero_casos) - (media_control / numero_control);
+
+            // para control de programa (a borrar)
+            ultimo_m = int(m);
+            contador++;
+
+
+        //    if (contador > 4000)
+        //        qDebug() << dmr_diff[m];
+
+
+            if (dmr_diff[m] < -_threshold || dmr_diff[m] > _threshold)
+            {
+                cont_diff++;
+            }
+        }
     }
+    qDebug() << "número de ventanas dwt con valor > 0 " << contador
+             << " número de ventanas con diff mayor que umbral: " << cont_diff
+             << " ultimo eme: " << ultimo_m
+             << " diferencia último: " << dmr_diff[ultimo_m];
+
 
     dmr_diff_cols = uint(cuda_data.h_haar_L[0]);
 
@@ -1684,110 +1501,9 @@ void HPG_Dhunter::save_dmr_list(int mh)
             //    qDebug() << "posición dwt inicial: " << pos_dwt_ini << "posición dwt final: " << pos_dwt_fin;
 
                 // encabezado de las características por fichero dentro de la zona dmr
-                s << " sample dwt_value ratio C_positions cov_min cov_mid cov_max sites_C sites_noC sites_mC sites_hmC dist_min dist_mid dist_max\n";
+                s << " sample dwt_value ratio C_positions cov_min cov_mid cov_max sites_Cnm sites_Cnh sites_mC sites_hmC dist_min dist_mid dist_max\n";
 
-/*
-                // rellena el fichero en función de si se ha analizado por grupo o por muestra individual
-                if (ui->grouped_samples->isChecked())
-                {
-                    // para cada uno de los grupos
-                    // f = 0 grupo de casos
-                    // f = 1 grupo de control
-                    for (uint f = 0; f < 2; f++)
-                    {
-                        int cobertura_minima = 500000;
-                        int cobertura_maxima = 0;
-                        int cobertura_media  = 0;
-                        int distancia_minima = 500000;
-                        int distancia_maxima = 0;
-                        int distancia_media  = 0;
-                        int sites_C          = 0;
-                        int sites_nC         = 0;
-                        int sites_mC         = 0;
-                        int sites_hmC        = 0;
-                        int posiciones       = 0;
-                        float dwt_valor      = 0.0;
-                        float ratio_medio    = 0.0;
-
-                        s << " " << (f ? "grupo_control" : "grupo_casos") << " ";
-
-                        linea_detail.clear();
-
-                        // busca la posición inical
-                        uint posicion = 0;
-                        uint posicion_ant;
-                        while (pos_inf > mc_grouped[f][posicion][0])
-                            posicion++;
-
-                        posicion_ant = posicion;
-
-                        // búsqueda de valores a lo largo del DMR
-                        while (pos_sup > mc_grouped[f][posicion][0] && posicion < mc_grouped[f].size())
-                        {
-                            if (mc_grouped[f][posicion][0] > pos_inf)
-                            {
-                                // cobertura
-                                if (cobertura_minima >= mc_grouped[f][posicion][mh ? 8 : 2])
-                                    cobertura_minima = int(mc_grouped[f][posicion][mh ? 8 : 2]);
-                                if (cobertura_maxima < mc_grouped[f][posicion][mh ? 8 : 2])
-                                    cobertura_maxima = int(mc_grouped[f][posicion][mh ? 8 : 2]);
-                                cobertura_media += mc_grouped[f][posicion][mh ? 8 : 2];
-                                if (mc_grouped[f][posicion][mh ? 8 : 2] > 0)
-                                    ratio_medio += float(mc_grouped[f][posicion][mh ? 6 : 5] / mc_grouped[f][posicion][mh ? 8 : 2]);
-
-                                // distancia
-                                if (posicion + 2 < mc_grouped[f].size() && ancho_dmr > mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0])
-                                {
-                                    if (distancia_minima >= mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0] && posicion != posicion_ant)
-                                        distancia_minima = int(mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0]);
-                                    if (distancia_maxima < mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0] && posicion != posicion_ant)
-                                        distancia_maxima = int(mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0]);
-                                    distancia_media += mc_grouped[f][posicion][0] - mc_grouped[f][posicion_ant][0];
-                                }
-
-                                // número de posiciones detectadas por tipo de mononucleótico
-                                sites_C   += (mc_grouped[f][posicion][3] > 0) ? 1 : 0;
-                                sites_nC  += (mc_grouped[f][posicion][4] > 0) ? 1 : 0;
-                                sites_mC  += (mc_grouped[f][posicion][5] > 0) ? 1 : 0;
-                                sites_hmC += (mc_grouped[f][posicion][6] > 0) ? 1 : 0;
-
-                                // número de posiciones detectadas con algún tipo de nucleótido sensible
-                                if (mc_grouped[f][posicion][mh ? 8 : 2] > 0)
-                                    posiciones++;
-                            //    posiciones++;
-
-                                posicion_ant = posicion;
-                            }
-
-                            posicion++;
-                        //    qDebug() << j << " -> " << mc[j].size() << " - " << posicion;
-                        }
-
-                        // valor medio dwt en la región identificada
-                        for (uint i = pos_dwt_ini; i <= pos_dwt_fin; i++)
-                            dwt_valor += h_haar_C[f][i];                    // (h_haar_C[f][i] / (pos_dwt_fin - pos_dwt_ini + 1));
-                        dwt_valor /= (pos_dwt_fin - pos_dwt_ini + 1);
-                    //    dwt_valor = h_haar_C[f][pos_dwt_ini];
-
-                        // carga de resultado en línea de texto para mostrar
-                        s << QString("%1").arg(double(dwt_valor)) << " " << //::number(double(dwt_valor), 'f', 3) << " " <<
-                             QString("%1").arg(posiciones > 1 ? double(ratio_medio / posiciones) : double(ratio_medio)) << " " <<
-                             QString::number(posiciones) << " " <<
-                             QString::number(cobertura_minima >= 500000 ? 0 : cobertura_minima) << " " <<
-                             QString::number(posiciones > 1 ? cobertura_media / posiciones : cobertura_media) << " " <<
-                             QString::number(cobertura_maxima) << " " <<
-                             QString::number(sites_C) << " " <<
-                             QString::number(sites_nC) << " " <<
-                             QString::number(sites_mC) << " " <<
-                             QString::number(sites_hmC) << " " <<
-                             QString::number(distancia_minima >= 500000 ? 0 : distancia_minima) << " " <<
-                             QString::number(posiciones > 1 ? distancia_media / posiciones : distancia_media) << " " <<
-                             QString::number(distancia_maxima) << "\n";
-                    }
-                }
-                else
-                {
-*/
+                // rellena el fichero
                 // guarda información de cada muestra de la zona dmr detectada
                 //***************************************************************************************
                 // busca la posición inical
@@ -2157,22 +1873,6 @@ void HPG_Dhunter::on_stop_clicked()
 }
 
 // ************************************************************************************************
-void HPG_Dhunter::on_grouped_samples_stateChanged(int arg1)
-{
-    ui->single_samples->setChecked(!arg1);
-    _grouped_samples = arg1;
-    _single_samples  = !arg1;
-}
-
-// ************************************************************************************************
-void HPG_Dhunter::on_single_samples_stateChanged(int arg1)
-{
-    ui->grouped_samples->setChecked(!arg1);
-    _grouped_samples = !arg1;
-    _single_samples  = arg1;
-}
-
-// ************************************************************************************************
 void HPG_Dhunter::on_genome_reference_currentIndexChanged(int index)
 {
     switch (index)
@@ -2206,8 +1906,6 @@ void HPG_Dhunter::enabling_widgets (bool arg)
     ui->hmC->setEnabled(arg);
     ui->forward->setEnabled(arg);
     ui->reverse->setEnabled(arg);
-    ui->grouped_samples->setEnabled(arg);
-    ui->single_samples->setEnabled(arg);
     ui->mC_cobertura->setEnabled(arg & _mc);
     ui->hmC_cobertura->setEnabled(arg & _hmc);
     ui->min_CpG_x_region->setEnabled(arg);

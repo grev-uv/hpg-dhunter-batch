@@ -63,7 +63,7 @@ QMAKE_LIBDIR += $$CUDA_DIR/lib64
 
 # cuda architecture
 #CUDA_ARCH    = sm_35       # minimum compute capability (version) for dynamic parallelism feature support
-CUDA_ARCH     = sm_61
+CUDA_ARCH     = sm_61       # compute capability of GTX 1080
 #CUDA_ARCH    = sm_50
 #CUDA_ARCH    = sm_52
 

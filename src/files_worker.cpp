@@ -115,8 +115,8 @@ void Files_worker::lectura()
             cobertura_mC  = aux1[1] + aux1[3];
             metilado      = aux1[3];
             //cobertura_hmC = aux1[1] + aux1[2] + aux1[4];
-            cobertura_hmC = aux1[1] + aux1[4];
-            h_metilado    = aux1[4];
+            cobertura_hmC = aux1[4] + aux1[6];
+            h_metilado    = aux1[6];
 
             if (cobertura_mC > 0)
                 proporcion_mC = metilado / cobertura_mC;
@@ -140,8 +140,8 @@ void Files_worker::lectura()
             // 0    posición en el cromosoma
             // 1    proporción de mC frente a la cobertura
             // 2    cobertura de mC (C + noC + mC)reads
-            // 3    número de reads identificando una C
-            // 4    número de reads identificando una no C
+            // 3    número de reads identificando una C no metilada
+            // 4    número de reads identificando una C no hidroximetilada
             // 5    número de reads identificando una mC
             // 6    número de reads identificando una hmC
             // 7    proporción de hmC frente a cobertura
@@ -154,9 +154,9 @@ void Files_worker::lectura()
             aux2.push_back(proporcion_mC);
             aux2.push_back(cobertura_mC);
             aux2.push_back(aux1[1]);
-            aux2.push_back(aux1[2]);
-            aux2.push_back(aux1[3]);
             aux2.push_back(aux1[4]);
+            aux2.push_back(aux1[3]);
+            aux2.push_back(aux1[6]);
             aux2.push_back(proporcion_hmC);
             aux2.push_back(cobertura_hmC);
             aux2.push_back(argumentos[2].toInt());

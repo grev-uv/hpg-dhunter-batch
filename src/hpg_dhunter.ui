@@ -321,32 +321,7 @@ control folder</string>
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_10">
-        <item>
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>DMR identification by:</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="grouped_samples">
-          <property name="text">
-           <string>grouped samples</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QCheckBox" name="single_samples">
-          <property name="text">
-           <string>single samples</string>
-          </property>
-          <property name="checked">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-       </layout>
+       <layout class="QHBoxLayout" name="horizontalLayout_10"/>
       </item>
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
